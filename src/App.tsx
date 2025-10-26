@@ -443,9 +443,6 @@ function VideoPreview() {
     seekCurrenTimeFrame();
     syncCurrentTimeWithVideo();
 
-    console.log("Playing: ", playing);
-    
-
     return () => {
       cancelAnimationFrame(syncId);
       video.cancelVideoFrameCallback(seekId);
@@ -625,7 +622,7 @@ function TimelineCutters({
   }
 
   function setBegin(value:number) {
-    beginRef.current = clamp(value, 0, endRef.current);
+    beginRef.current = clamp(value, 0, (endRef.current) - (16 / framesCanvasRef.current!.offsetWidth));
   }
 
   function setEnd(value:number) {
@@ -782,19 +779,23 @@ function TimelineCutters({
   }, [duration]);
 
   useEffect(() => { 
-    setBegin(0);
-    setEnd(1);
+    beginRef.current = 0;
+    endRef.current = 1;
   }, [videoUrl]);
   
   return (
 
     <>
       
-      <div
-        ref={cutElementRef}
-        className='border-l-8 border-l-white rounded-[8px] border-r-8 border-r-white bg-[#307fd89f] h-full top-0 absolute box-border'>
+      {videoUrl &&
+      
+        <div
+          ref={cutElementRef}
+          className='border-l-8 border-l-white rounded-[8px] border-r-8 border-r-white bg-[#187db79f] h-full top-0 absolute box-border'>
 
-      </div>
+        </div>
+      
+      }
     
     </>
 
@@ -1186,7 +1187,7 @@ function Timeline() {
         
         <div
           ref={timelinePadRef}
-          className='overflow-hidden touch-none rounded-[8px] bg-gray-900 w-full h-[100%] max-h-[200px] relative'>
+          className='overflow-hidden touch-none rounded-[8px] bg-gray-900 w-full h-[100%] max-h-[300px] relative'>
           
           <div
             className='absolute left-1/2 top-1/2 -translate-y-1/2 w-fit h-[100%] max-h-[100px]'>
@@ -1202,7 +1203,7 @@ function Timeline() {
         </div>
 
         <div
-          className='bg-blue-500 absolute -translate-x-1/2 left-1/2 h-full w-[3px]'>
+          className='pointer-events-none  bg-blue-500 absolute -translate-x-1/2 left-1/2 h-full w-[3px]'>
           
           <div className='absolute -top-1 left-1/2 -translate-x-1/2 rotate-180'>
             <TriangleIcon
