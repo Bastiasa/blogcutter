@@ -5,20 +5,23 @@ type PickVideoCallbackData = {
     progress: number;
 } | {
     type: 1;
-    chunk: string;
-    totalSize: number;
-} | {
-    type: 2;
     success: true;
     fileName: string;
     filePath: string;
+    width: number;
+    height: number;
+    size: number;
 } | {
-    type: 2;
+    type: 1;
     success: false
 }
 
+
+
 export interface MediaManager {
     pickVideoFile(callback: (data: PickVideoCallbackData) => void): Promise<void>;
+    pickFolder(): Promise<void>;
+    makeTrim(args: { start: number, end: number }): Promise<{ code: number }>;
 }
 
 export const MediaManager = registerPlugin<MediaManager>('MediaManager');

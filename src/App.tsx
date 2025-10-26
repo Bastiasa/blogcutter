@@ -7,7 +7,7 @@ import {
   PanelResizeHandle,
 } from "react-resizable-panels";
 
-import { useVideoContext, VideoContextProvider } from './VideoContext';
+import { useVideoContext, VideoContextProvider, type VideoContextMap } from './VideoContext';
 import { CheckIcon, ExternalLinkIcon, ListCheckIcon, MaximizeIcon, MenuIcon, MinimizeIcon, PauseIcon, PlayIcon, RedoIcon, ScissorsIcon, TriangleIcon, UndoIcon } from 'lucide-react';
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from './components/ui/button';
@@ -33,6 +33,28 @@ function formatTime(seconds:number) {
   } else {
     return [m, s].map(v => v.toString().padStart(2, '0')).join(':');
   }
+}
+
+function formatSize(size:number) {
+  const units = ['bytes', 'KB', 'MB', 'GB'];
+  let i = 0;
+
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+
+  return `${size.toFixed(1)} ${units[i]}`;
+}
+
+function clamp(value:number, min:number, max:number) {
+  return Math.max(
+    min,
+    Math.min(
+      value,
+      max
+    )
+  );
 }
 
 function TaskUI() {
@@ -109,7 +131,6 @@ function MenuButton() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   function openVideoInAndroid() {
-    const optimizedVideoBuffer: number[] = [];
 
     MediaManager.pickVideoFile(async (data) => {
       switch (data.type) {
@@ -124,19 +145,6 @@ function MenuButton() {
         
         case 1:
 
-          const decodedChunk = atob(data.chunk);
-          for (const character of decodedChunk) {
-            optimizedVideoBuffer.push(character.charCodeAt(0));
-            setLoadingData(v => ({
-              enabled: true,
-              progress: optimizedVideoBuffer.length / data.totalSize * 100
-            }));
-          }
-          
-          break;
-        
-        case 2:
-
           let successSettingVideo = false;
 
           setLoadingData({
@@ -149,19 +157,16 @@ function MenuButton() {
             const path = data.filePath;
 
             const srcOptimizedVideo = Capacitor.convertFileSrc(path);
-            // const optimizedVideoResponse = await fetch(srcOptimizedVideo);
-            // const optimizedVideoBlob = await optimizedVideoResponse.blob();
-
-            // const optimizedVideo = new File(
-            //   [optimizedVideoBlob],
-            //   data.fileName,
-            //   {type:"video/mp4"}
-            // )
 
             console.log("Optimized video src: ", srcOptimizedVideo);
             
 
-            successSettingVideo = await setVideo(srcOptimizedVideo, data.fileName);
+            successSettingVideo = await setVideo(
+              srcOptimizedVideo,
+              data.fileName,
+              data
+            );
+
             setSheetOpen(false);
           }
 
@@ -264,9 +269,22 @@ function MenuButton() {
     
   }
 
+  function onSelectFolderPressed() {
+    MediaManager.pickFolder();
+  }
+
   function onOptionPressed(option: OptionCommand) {
-    if (option == 'openvideo') {
-      onOpenVideoPressed();
+    switch (option) {
+      case 'openvideo':
+        onOpenVideoPressed();
+        break;
+      
+      case 'selectfolder':
+        onSelectFolderPressed();
+        break;
+    
+      default:
+        break;
     }
   }
 
@@ -541,7 +559,15 @@ function VideoPreview() {
 
 function Controls() {
 
-  const { fullscreen, setFullscreen, play, pause, playing, videoUrl } = useVideoContext();
+  const {
+    fullscreen,
+    setFullscreen,
+    play,
+    pause,
+    playing,
+    videoUrl,
+    videoMetadata
+  } = useVideoContext();
 
   function onPlaybackSwitchClicked() {
     
@@ -558,11 +584,21 @@ function Controls() {
 
   
   return <>
-    <Button
+    
+    {videoMetadata &&
+    
+    
+      <span className='absolute left-4 text-xs text-gray-600'>
+        {Math.floor(videoMetadata.width)}x{Math.floor(videoMetadata.height)} {formatSize(videoMetadata.size)}
+      </span>
+    
+    }
+
+    {/* <Button
       disabled={!videoUrl}
       variant={'ghost'}>
       <UndoIcon />  
-    </Button>
+    </Button> */}
     
     <Button
       variant={'ghost'}
@@ -571,11 +607,11 @@ function Controls() {
       {playing ? <PauseIcon fill='white'/> : <PlayIcon fill='white'/>}
     </Button>
 
-    <Button
+    {/* <Button
       disabled={!videoUrl}
       variant={'ghost'}>
       <RedoIcon />
-    </Button>
+    </Button> */}
     
     <Button
       disabled={!videoUrl}
@@ -605,32 +641,17 @@ function TimelineCutters({
 
   const cutElementRef = useRef<HTMLDivElement>(null);
 
-  const beginRef = useRef(0);
-  const endRef = useRef(0);
-
   function getElements() {
     return {
       cutElement: cutElementRef.current as HTMLDivElement
     }
   }
 
-  function clamp(value:number, min:number, max:number) {
-    return Math.min(
-      max,
-      Math.max(value, min)
-    );
-  }
 
-  function setBegin(value:number) {
-    beginRef.current = clamp(value, 0, (endRef.current) - (16 / framesCanvasRef.current!.offsetWidth));
-  }
 
-  function setEnd(value:number) {
-    endRef.current = clamp(value, beginRef.current, 1);
-  }
 
   function getGrabberValue(grabberName:Grabber) {
-    return grabberName == 'left' ? beginRef.current : endRef.current;
+    return grabberName == 'left' ? videoContext.trimStart : videoContext.trimEnd;
   }
 
   useEffect(() => { 
@@ -643,9 +664,33 @@ function TimelineCutters({
     let loopId = -1;
 
     const loop = () => {
+      const grabberThickness = (8 / framesCanvasRef.current!.offsetWidth);
       loopId = requestAnimationFrame(loop);
-      cutElement.style.left = `${(beginRef.current - displacementRef.current) * 100}%`;
-      cutElement.style.width = `${(1 - (1 - endRef.current) - beginRef.current) * 100}%`;
+
+      let left = videoContext.trimStart - displacementRef.current - grabberThickness;
+
+      let width = clamp((videoContext.trimEnd - videoContext.trimStart) + grabberThickness*2, 0, 1+grabberThickness*2);
+
+      // left = clamp(
+      //   left,
+      //   -displacementRef.current,
+      //   videoContext.trimEnd - displacementRef.current - grabberThickness
+      // );
+      
+
+      // console.log(
+      //   Math.floor((-displacementRef.current) * 100),
+      //   Math.floor(left * 100),
+      //   Math.floor((videoContext.trimEnd - displacementRef.current - grabberThickness) * 100)
+      // );
+      
+      console.log(
+        Math.floor(width * 100)
+      );
+      
+
+      cutElement.style.left = `${left * 100}%`;
+      cutElement.style.width = `${width * 100}%`;
       
       if (editingGrabber != null) {
         videoContext.currentTime = duration * getGrabberValue(editingGrabber[0]);
@@ -665,8 +710,8 @@ function TimelineCutters({
       const left = rect.left;
       const right = rect.right;
 
-      const isInLeft = (clientX > left && clientX < (left + 16));
-      const isInRight = (clientX > (right - 16) && clientX < right)
+      const isInLeft = (clientX > left && clientX < (left + 8));
+      const isInRight = (clientX > (right - 8) && clientX < right)
       
       if (isInLeft) {
         return 'left'
@@ -704,8 +749,8 @@ function TimelineCutters({
       } else if (isInsideCutElement(e)) {
         bothGrabbers = [
           clientXToPercentage(e.clientX),
-          beginRef.current,
-          endRef.current,
+          videoContext.trimStart,
+          videoContext.trimEnd,
           e.pointerId
         ];
         settingGrabberRef.current = true;
@@ -724,9 +769,10 @@ function TimelineCutters({
         
         const percentagePosition = clientXToPercentage(e.clientX);
         const difference = percentagePosition - bothGrabbers[0];
-
-        setBegin(bothGrabbers[1] + difference);
-        setEnd(bothGrabbers[2] + difference);
+        
+        
+        videoContext.trimStart = (bothGrabbers[1] + difference);
+        videoContext.trimEnd = (bothGrabbers[2] + difference);
 
         return;
       }
@@ -743,11 +789,11 @@ function TimelineCutters({
       
       switch (editingGrabber[0]) {
         case 'left':
-          setBegin(percentagePosition);
+          videoContext.trimStart = (percentagePosition);
           break;
         
         case 'right':
-          setEnd(percentagePosition);
+          videoContext.trimEnd = (percentagePosition);
           break;
       }
     }
@@ -779,23 +825,18 @@ function TimelineCutters({
   }, [duration]);
 
   useEffect(() => { 
-    beginRef.current = 0;
-    endRef.current = 1;
+    videoContext.trimEnd = 0;
+    videoContext.trimEnd = 1;
   }, [videoUrl]);
   
   return (
 
     <>
-      
-      {videoUrl &&
-      
-        <div
-          ref={cutElementRef}
-          className='border-l-8 border-l-white rounded-[8px] border-r-8 border-r-white bg-[#187db79f] h-full top-0 absolute box-border'>
+      <div
+        ref={cutElementRef}
+        className={`${!videoUrl ? 'hidden' : ''} border-l-8 border-l-white rounded-[8px] border-r-8 border-r-white bg-[#187db79f] h-full top-0 absolute box-border`}>
 
-        </div>
-      
-      }
+      </div>
     
     </>
 
@@ -1219,17 +1260,41 @@ function Timeline() {
 
 function _app() {
 
-  const { videoName } = useVideoContext();
+  const videoContext = useVideoContext();
 
+  const {
+    videoName,
+    duration,
+    
+  } = videoContext;
 
-  // useEffect(() => {
-  //   (async () => {
-  //     const videoFileResponse = await fetch('/hardcoded_video.mp4');
-  //     const videoBlob = await videoFileResponse.blob();
-  //     const videoFile = new File([videoBlob], 'harcoded_video.mp4', { type: "video/mp4" });
-  //     setVideo(videoFile);
-  //   })()
-  // }, []);
+  function onCutButtonPressed() {
+
+    const startTime = videoContext.trimStart * duration
+    const endTime = videoContext.trimStart * duration
+
+    const process: VideoContextMap["doneCuts"][number] = [
+      startTime,
+      endTime,
+      'trimming'
+    ];
+
+    MediaManager.makeTrim({
+      start: Math.floor(startTime * 1000),
+      end: Math.floor(endTime * 1000)
+    }).then((data) => {
+      
+      if (data.code == 4) {
+        process[2] = 'done';
+      } else if (data.code == 3) {
+        process[2] = 'failed'
+      } else if (data.code == 0) {
+        document.write("FUCK!");
+      }
+
+    });
+  }
+
 
   return (
     <div className="h-screen w-screen vbox py-8 max-w-[600px] mx-auto">
@@ -1237,7 +1302,7 @@ function _app() {
       <div className="hbox h-fit px-5 py-5 gap-4 items-center">
         <span className='grow overflow-hidden text-ellipsis text-nowrap'>{videoName ? videoName : "..."}</span>
         <TaskUI/>
-        <Button>Cut <ScissorsIcon/></Button>
+        <Button onClick={onCutButtonPressed}>Cut <ScissorsIcon/></Button>
         <MenuButton/>
       </div>
         

@@ -43,6 +43,7 @@ dependencies {
     implementation project(':capacitor-cordova-android-plugins')
 
     implementation "com.github.MasayukiSuda:Mp4Composer-android:v0.4.1"
+    implementation "androidx.documentfile:documentfile:1.1.0"
 
 }
 
