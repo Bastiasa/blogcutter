@@ -26,8 +26,8 @@ class MediaManager:Plugin() {
     val PICK_TYPE_CHUNK = 1
     val PICK_TYPE_ENDED = 2
 
-    val OPTIMIZED_VIDEO_WIDTH = 864
-    val OPTIMIZED_VIDEO_BITRATE = 200
+    val OPTIMIZED_VIDEO_MAX_SIZE = 864
+    val OPTIMIZED_VIDEO_BITRATE = 50
 
 
     private var composer:Mp4Composer? = null
@@ -69,12 +69,15 @@ class MediaManager:Plugin() {
         val videoNaturalWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)!!.toInt()
         val videoNaturalHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)!!.toInt()
 
-        var optimizedWidth = OPTIMIZED_VIDEO_WIDTH
-        var optimizedHeight = (optimizedWidth.toDouble() / videoNaturalWidth.toDouble() * videoNaturalHeight.toDouble()).toInt()
+        var optimizedWidth = videoNaturalWidth
+        var optimizedHeight = videoNaturalHeight
 
-        if (optimizedWidth > videoNaturalWidth) {
-            optimizedWidth = videoNaturalWidth
-            optimizedHeight = videoNaturalHeight
+        if (OPTIMIZED_VIDEO_MAX_SIZE < videoNaturalWidth) {
+            optimizedWidth = OPTIMIZED_VIDEO_MAX_SIZE
+            optimizedHeight = (optimizedWidth.toDouble() / videoNaturalWidth.toDouble() * videoNaturalHeight.toDouble()).toInt()
+        } else if (OPTIMIZED_VIDEO_MAX_SIZE < videoNaturalHeight) {
+            optimizedHeight = OPTIMIZED_VIDEO_MAX_SIZE
+            optimizedWidth = (optimizedHeight.toDouble() / videoNaturalHeight.toDouble() * videoNaturalWidth.toDouble()).toInt()
         }
 
         log("Video size calculated: $videoNaturalWidth, $videoNaturalHeight -> $optimizedWidth, $optimizedHeight")
@@ -101,7 +104,7 @@ class MediaManager:Plugin() {
                 }
 
                 FileInputStream(optimizedVideoFile).use { input ->
-                    val chunkSize = 1024
+                    val chunkSize = 1024 * 256
                     val buffer = ByteArray(chunkSize)
                     var bytesRead:Int
 

@@ -451,7 +451,7 @@ function VideoPreview() {
 
     <div
       ref={containerRef}
-      className='bg-black pt-4 w-full h-1 grow contain-content relative'>
+      className={`bg-black ${!fullscreen ? 'pt-4' : ''} w-full h-1 grow contain-content relative`}>
       <video
         preload='auto'
         className='size-full object-contain'
