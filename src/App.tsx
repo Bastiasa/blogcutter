@@ -590,18 +590,26 @@ function Controls() {
   </>
 }
 
-function TimelineCutters({displacementRef, settingGrabberRef}: {displacementRef:RefObject<number>, settingGrabberRef:RefObject<boolean>}) {
+function TimelineCutters({
+  displacementRef,
+  settingGrabberRef,
+  framesCanvasRef}: {
+    displacementRef: RefObject<number>,
+    settingGrabberRef: RefObject<boolean>,
+    framesCanvasRef: RefObject<HTMLCanvasElement|null>
+  }) {
   type Grabber = 'left' | 'right';
 
   const videoContext = useVideoContext();
   const {
-    duration
+    duration,
+    videoUrl
   } = videoContext;
 
   const cutElementRef = useRef<HTMLDivElement>(null);
 
-  const beginRef = useRef(0.25);
-  const endRef = useRef(0.75);
+  const beginRef = useRef(0);
+  const endRef = useRef(0);
 
   function getElements() {
     return {
@@ -698,15 +706,20 @@ function TimelineCutters({displacementRef, settingGrabberRef}: {displacementRef:
         return;
       }
 
+      const canvasElement = framesCanvasRef.current as HTMLCanvasElement;
       const movementX = e.movementX / window.innerWidth;
+
+      const canvasRect = canvasElement.getBoundingClientRect();
+
+      const percentagePosition = ((e.clientX - canvasRect.left) / canvasRect.width);
       
       switch (editingGrabber[0]) {
         case 'left':
-          setBegin(beginRef.current + movementX);
+          setBegin(percentagePosition);
           break;
         
         case 'right':
-          setEnd(endRef.current + movementX);
+          setEnd(percentagePosition);
           break;
       }
     }
@@ -731,6 +744,11 @@ function TimelineCutters({displacementRef, settingGrabberRef}: {displacementRef:
       window.removeEventListener('pointermove', onWindowPointerMove);
     }
   }, [duration]);
+
+  useEffect(() => { 
+    setBegin(0);
+    setEnd(1);
+  }, [videoUrl]);
   
   return (
 
@@ -1141,7 +1159,8 @@ function Timeline() {
               className='touch-none select-none outline-violet-900 outline-[4px] rounded-[8px] relative h-[100%] max-h-[100px] bg-blue-300'/>
             <TimelineCutters
               displacementRef={displacementRef}
-              settingGrabberRef={settingGrabberRef}/>
+              settingGrabberRef={settingGrabberRef}
+              framesCanvasRef={framesCanvasRef}/>
           </div>
           
         </div>
