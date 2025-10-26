@@ -9,10 +9,10 @@ import {
 
 import { useVideoContext, VideoContextProvider } from './VideoContext';
 import { CheckIcon, ExternalLinkIcon, ListCheckIcon, MaximizeIcon, MenuIcon, MinimizeIcon, PauseIcon, PlayIcon, RedoIcon, ScissorsIcon, TriangleIcon, UndoIcon } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from './components/ui/button';
 import { Spinner } from './components/ui/spinner';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Ref, type RefObject } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from './components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './components/ui/alert-dialog';
 import { Slider } from './components/ui/slider';
@@ -146,13 +146,22 @@ function MenuButton() {
 
           if (data.success) {
 
-            const videoFile = new File(
-              [new Uint8Array(optimizedVideoBuffer)],
-              data.fileName,
-              {type:"video/mp4"}
-            )
+            const path = data.filePath;
 
-            successSettingVideo = await setVideo(videoFile);
+            const srcOptimizedVideo = Capacitor.convertFileSrc(path);
+            // const optimizedVideoResponse = await fetch(srcOptimizedVideo);
+            // const optimizedVideoBlob = await optimizedVideoResponse.blob();
+
+            // const optimizedVideo = new File(
+            //   [optimizedVideoBlob],
+            //   data.fileName,
+            //   {type:"video/mp4"}
+            // )
+
+            console.log("Optimized video src: ", srcOptimizedVideo);
+            
+
+            successSettingVideo = await setVideo(srcOptimizedVideo, data.fileName);
             setSheetOpen(false);
           }
 
@@ -164,7 +173,12 @@ function MenuButton() {
             setAlertData({
               open: true,
               title: "Error",
-              text:"Something went wrong with this file."
+              text: "Something went wrong with this file.",
+              onAccept() {
+                  
+              },
+
+              acceptText: "Ok"
             });
           } 
           break;
@@ -176,7 +190,7 @@ function MenuButton() {
     const inputElement = document.createElement('input');
 
     inputElement.type = 'file';
-    inputElement.accept = 'video/*';
+    inputElement.accept = 'video/mp4';
     inputElement.multiple = false;
     inputElement.style.display = 'none';
 
@@ -188,7 +202,7 @@ function MenuButton() {
         return;
       }
       const videoFile = inputElement.files[0];
-      setVideo(videoFile)
+      setVideo(URL.createObjectURL(videoFile), videoFile.name)
         .then(success => {
           setLoadingData({ enabled: false });
           if (!success) {
@@ -262,31 +276,36 @@ function MenuButton() {
       
       <Sheet
         open={sheetOpen}>
-      <SheetTrigger asChild>
+        <SheetTrigger asChild>
           <Button
             onClick={()=>setSheetOpen(true)}
             variant="ghost">
             <MenuIcon />
           </Button>
-      </SheetTrigger>
+        </SheetTrigger>
+        
 
-      <SheetContent className={`${loadingData.enabled ? "hidden" : ""} py-12`}>
-        <SheetHeader>
-          <SheetTitle>Options</SheetTitle>
+        <SheetContent
+          onInteractOutside={() => setSheetOpen(false)}
+          onEscapeKeyDown={()=>setSheetOpen(false)}
+          className={`${loadingData.enabled ? "hidden" : ""} py-12 [&>button]:hidden`}>
+          
           <SheetHeader>
-            <div className="vbox">
-              {OPTIONS.map((v, i) => {
-                return <button
-                  onPointerUp={()=>onOptionPressed(v[1])}
-                  className='hover:bg-secondary transition-colors px-2 text-left w-full py-4'
-                  key={i}>
-                  {v[0]}
-                </button>
-              })}
-            </div>
+            <SheetTitle>Options</SheetTitle>
+            <SheetHeader>
+              <div className="vbox">
+                {OPTIONS.map((v, i) => {
+                  return <button
+                    onPointerUp={()=>onOptionPressed(v[1])}
+                    className='hover:bg-secondary transition-colors px-2 text-left w-full py-4'
+                    key={i}>
+                    {v[0]}
+                  </button>
+                })}
+              </div>
+            </SheetHeader>
           </SheetHeader>
-        </SheetHeader>
-      </SheetContent>
+        </SheetContent>
     </Sheet>
       
     <AlertDialog
@@ -366,6 +385,8 @@ function VideoPreview() {
   const wasPlayingRef = useRef(false);
 
   const [currentTimeState, setCurrentTimeState] = useState(0);
+  
+
 
   useEffect(() => { 
     
@@ -381,56 +402,68 @@ function VideoPreview() {
 
   useEffect(() => {
     
-    if (playing) {
-      videoRef.current?.play();
-    } else {
-      videoRef.current?.pause();
-    }
-
-
+    const video = videoRef.current as HTMLVideoElement;
+    let seekId = -1;
     let syncId = -1;
 
-    const syncCurrentTime = () => {
-      syncId = requestAnimationFrame(syncCurrentTime);
+    const syncCurrentTimeWithVideo = () => {
+      syncId = requestAnimationFrame(syncCurrentTimeWithVideo);
 
-      if (!playing && videoRef.current) {
-        videoRef.current.currentTime = videoContext.currentTime;
-      } else if (playing && videoRef.current) {
-        videoContext.currentTime = videoRef.current.currentTime;
+      if (video.paused && !video.ended) {
+        video
+          .play()
+          .catch();
       }
 
-      if (Math.abs(currentTimeState - videoContext.currentTime) >= 0.05) {
+      if (playing) {
+        video.muted = false;
+        videoContext.currentTime = video.currentTime;
+      } else {
+        video.muted = true;
+
+        if (video.ended) {
+          video.currentTime = videoContext.currentTime;
+        }
+      }
+
+      if (fullscreen && Math.abs(currentTimeState - videoContext.currentTime) >= 0.05) {
         setCurrentTimeState(videoContext.currentTime);
+      }
+
+    };
+
+    const seekCurrenTimeFrame = () => {
+      seekId = video.requestVideoFrameCallback(seekCurrenTimeFrame);
+
+      if (!playing) {
+        video.currentTime = videoContext.currentTime;
       }
     }
 
-    syncCurrentTime();
+    seekCurrenTimeFrame();
+    syncCurrentTimeWithVideo();
 
+    console.log("Playing: ", playing);
+    
 
     return () => {
       cancelAnimationFrame(syncId);
-    }
-  }, [playing, currentTimeState]);
-
-  useEffect(() => {
-
-    const onTimeUpdate = () => {
-      //videoContext.currentTime = videoRef.current?.currentTime ?? NaN;
-    };
-
-    function onVideoPaused() {
-      pause();
-    };
-
-    videoRef.current?.addEventListener('timeupdate', onTimeUpdate);
-    videoRef.current?.addEventListener('pause', onVideoPaused);
-
-    return () => {
-      videoRef.current?.removeEventListener('timeupdate', onTimeUpdate);
-      videoRef.current?.removeEventListener('pause', onVideoPaused);
+      video.cancelVideoFrameCallback(seekId);
     }
 
-  }, []);
+
+  }, [playing, currentTimeState, fullscreen]);
+
+  useEffect(() => { 
+    
+    const video = videoRef.current as HTMLVideoElement
+    video.style.display = 'none';
+    
+    if (videoUrl) {
+      video.src = videoUrl;
+    }
+    
+  }, [videoUrl]);
 
   function onSliderPointerDown() {
     wasPlayingRef.current = playing;
@@ -447,16 +480,26 @@ function VideoPreview() {
     videoContext.currentTime = v[0];
   }
 
+  function onVideoEnded() {
+    pause();
+  }
+
+  function onVideoCanPlay() {
+    videoRef.current!.style.display = 'unset';
+  }
+
   return (
 
     <div
       ref={containerRef}
       className={`bg-black ${!fullscreen ? 'pt-4' : ''} w-full h-1 grow contain-content relative`}>
       <video
+        style={{display:'none'}}
+        onEnded={onVideoEnded}
+        onCanPlay={onVideoCanPlay}
         preload='auto'
         className='size-full object-contain'
-        ref={videoRef}
-        src={videoUrl}/>
+        ref={videoRef}/>
       
       {fullscreen &&
         
@@ -504,6 +547,7 @@ function Controls() {
   const { fullscreen, setFullscreen, play, pause, playing, videoUrl } = useVideoContext();
 
   function onPlaybackSwitchClicked() {
+    
     if (playing) {
       pause();
     } else {
@@ -546,6 +590,163 @@ function Controls() {
   </>
 }
 
+function TimelineCutters({displacementRef, settingGrabberRef}: {displacementRef:RefObject<number>, settingGrabberRef:RefObject<boolean>}) {
+  type Grabber = 'left' | 'right';
+
+  const videoContext = useVideoContext();
+  const {
+    duration
+  } = videoContext;
+
+  const cutElementRef = useRef<HTMLDivElement>(null);
+
+  const beginRef = useRef(0.25);
+  const endRef = useRef(0.75);
+
+  function getElements() {
+    return {
+      cutElement: cutElementRef.current as HTMLDivElement
+    }
+  }
+
+  function clamp(value:number, min:number, max:number) {
+    return Math.min(
+      max,
+      Math.max(value, min)
+    );
+  }
+
+  function setBegin(value:number) {
+    beginRef.current = clamp(value, 0, endRef.current);
+  }
+
+  function setEnd(value:number) {
+    endRef.current = clamp(value, beginRef.current, 1);
+  }
+
+  function getGrabberValue(grabberName:Grabber) {
+    return grabberName == 'left' ? beginRef.current : endRef.current;
+  }
+
+  useEffect(() => { 
+    
+    const { cutElement } = getElements();
+
+
+    let editingGrabber:[mark: Grabber, id: number]|null = null;
+    let loopId = -1;
+
+    const loop = () => {
+      loopId = requestAnimationFrame(loop);
+      cutElement.style.left = `${(beginRef.current - displacementRef.current) * 100}%`;
+      cutElement.style.width = `${(1 - (1 - endRef.current) - beginRef.current) * 100}%`;
+      
+      if (editingGrabber != null) {
+        videoContext.currentTime = duration * getGrabberValue(editingGrabber[0]);
+      }
+    }
+
+    loop();
+
+    function getHoveredGrabber({clientX, clientY}:{clientX:number, clientY:number}):Grabber|undefined {
+      const rect = cutElement.getBoundingClientRect();
+
+
+      if (!(clientY > rect.top && clientY < rect.bottom)) {
+        return;
+      }
+
+      const left = rect.left;
+      const right = rect.right;
+
+      const isInLeft = (clientX > left && clientX < (left + 16));
+      const isInRight = (clientX > (right - 16) && clientX < right)
+      
+      if (isInLeft) {
+        return 'left'
+      } else if (isInRight) {
+        return 'right';
+      }
+    }
+
+    function onWindowPointerDown(e: PointerEvent) {
+      const grabbed = getHoveredGrabber(e);
+
+      if (grabbed) {
+        editingGrabber = [
+          grabbed,
+          e.pointerId
+        ];
+
+        settingGrabberRef.current = true;
+      }
+    }
+
+    function onWindowPointerMove(e: PointerEvent) {
+      
+      if (getHoveredGrabber(e) !== undefined) {
+        document.body.style.cursor = 'e-resize';
+      } else {
+        document.body.style.cursor = '';
+      }
+      
+      if (!editingGrabber) {
+        return;
+      }
+
+      if (editingGrabber[1] !== e.pointerId) {
+        return;
+      }
+
+      const movementX = e.movementX / window.innerWidth;
+      
+      switch (editingGrabber[0]) {
+        case 'left':
+          setBegin(beginRef.current + movementX);
+          break;
+        
+        case 'right':
+          setEnd(endRef.current + movementX);
+          break;
+      }
+    }
+
+    function onWindowPointerUp(e: PointerEvent) {
+      
+      if (editingGrabber !== null) {
+        editingGrabber = null;
+        settingGrabberRef.current = false; 
+      }
+
+    }
+
+    window.addEventListener('pointerdown', onWindowPointerDown);
+    window.addEventListener('pointerup', onWindowPointerUp);
+    window.addEventListener('pointermove', onWindowPointerMove);
+
+    return () => {
+      cancelAnimationFrame(loopId);
+      window.removeEventListener('pointerdown', onWindowPointerUp);
+      window.removeEventListener('pointerup', onWindowPointerUp);
+      window.removeEventListener('pointermove', onWindowPointerMove);
+    }
+  }, [duration]);
+  
+  return (
+
+    <>
+      
+      <div
+        ref={cutElementRef}
+        className='border-l-8 border-l-white rounded-2xl border-r-8 border-r-white bg-[#307fd89f] h-full top-0 absolute box-border'>
+
+      </div>
+    
+    </>
+
+  );
+}
+
 function Timeline() {
 
   const videoContext = useVideoContext();
@@ -570,15 +771,13 @@ function Timeline() {
   type PointerInfo = {id:number, startX:number, startY:number, x:number, y:number}
   const pointersRef = useRef<PointerInfo[]>([]);
   const pinchZoomStartRef = useRef(NaN);
+  const pinchingRef = useRef(false);
   const wasPlayingRef = useRef<boolean>(playing);
 
   const displacementRef = useRef(0);
   const timelineZoomRef = useRef(1);
   const zoomJustChanged = useRef(false);
-
-  function setDisplacement(displacement: number) {
-    displacementRef.current = displacement;
-  }
+  const settingGrabberRef = useRef(false);
 
   function getElements() {
     return {
@@ -587,6 +786,13 @@ function Timeline() {
     };
   }
 
+  function setDisplacement(displacement: number) {
+
+    displacementRef.current = Math.max(
+      0,
+      Math.min(displacement, 1
+    ));
+  }
 
   function getPointerData(id:number) {
     return pointersRef.current.find(pInfo => pInfo.id == id);
@@ -600,6 +806,9 @@ function Timeline() {
   // Load preview frames
   useEffect(() => {
     const { framesCanvas } = getElements();
+
+    setDisplacement(0);
+    zoomJustChanged.current = zoomJustChanged.current = true;
 
     if (!videoUrl) {
       framesCanvas.style.display = 'none';
@@ -657,7 +866,8 @@ function Timeline() {
               resolve();
             }
 
-            videoForRender.addEventListener('seeked', draw, {once:true});
+            videoForRender.addEventListener('seeked', draw, { once: true });
+            // videoForRender.requestVideoFrameCallback(draw);
             videoForRender.currentTime = time;
           });
         };
@@ -710,19 +920,18 @@ function Timeline() {
     function adjustSize() {
 
       if (!playing) {
-        const newCurrentTime = displacementRef.current / framesCanvas.offsetWidth * -1 * duration;
-        if (Math.abs(newCurrentTime - videoContext.currentTime) > 0.1) {
-          videoContext.currentTime = newCurrentTime;    
+        const newCurrentTime = displacementRef.current * duration;
+        if (Math.abs(newCurrentTime - videoContext.currentTime) > 0.04 && !settingGrabberRef.current) {
+          videoContext.currentTime = newCurrentTime;
         }
       }
 
       if (zoomJustChanged.current) {
         zoomJustChanged.current = false;
 
+
         const canvasWidth = duration * SECOND_WIDTH * timelineZoomRef.current;
         framesCanvas.width = canvasWidth;
-
-        setDisplacement((videoContext.currentTime / duration) * -canvasWidth);
         drawFrames();
       }
     }
@@ -744,25 +953,21 @@ function Timeline() {
     }
   }, [videoUrl, duration]);
 
-  // Reset displacement on load video
-  useEffect(() => {
-    setDisplacement(0);
-  }, [videoUrl])
 
   // Sync displacement with playing video
   useEffect(() => {
 
-    const { framesCanvas, timelinePad } = getElements();
+    const { framesCanvas } = getElements();
     let onFrameId = -1;
 
     const onFrame = () => {
       onFrameId = requestAnimationFrame(onFrame);
 
       if (pointersRef.current.length <= 0) {
-        displacementRef.current = ((videoContext.currentTime / duration) * -framesCanvas.offsetWidth);
+        displacementRef.current = videoContext.currentTime / duration;
       }
 
-      framesCanvas.style.left = `${timelinePad.offsetWidth * .5 + displacementRef.current}px`;
+      framesCanvas.style.left = `${(displacementRef.current * -framesCanvas.offsetWidth)}px`;
     };
 
     onFrame();
@@ -795,13 +1000,13 @@ function Timeline() {
     }
 
     function onPointerUp(event:PointerEvent) {
-      pointersRef.current = pointersRef.current.filter(pInfo => pInfo.id !== event.pointerId);
-      
-      if (pointersRef.current.length <= 0) {
+      if (pointersRef.current.length === 1) {
         if (wasPlayingRef.current) {
           play();
         }
       }
+      
+      pointersRef.current = pointersRef.current.filter(pInfo => pInfo.id !== event.pointerId);
     }
 
     function onPointerMove(event: PointerEvent) {
@@ -840,14 +1045,9 @@ function Timeline() {
 
 
     function onPointerMove(e:PointerEvent) {
-      if (hasPointer(e.pointerId) && pointersRef.current.length <= 1) {
+      if (hasPointer(e.pointerId) && pointersRef.current.length <= 1 && !pinchingRef.current && !settingGrabberRef.current) {
         e.preventDefault();
-        setDisplacement(
-          Math.max(
-            -framesCanvas.offsetWidth,
-            Math.min(displacementRef.current + e.movementX, 0
-            ))
-        );
+        setDisplacement(displacementRef.current - e.movementX / framesCanvas.width);
       }
     }
 
@@ -868,46 +1068,58 @@ function Timeline() {
       const newZoom = Math.max(MIN_ZOOM, timelineZoomRef.current - e.deltaY * .001);
       timelineZoomRef.current = Math.min(newZoom, MAX_ZOOM);
       zoomJustChanged.current = true;
-      console.log(newZoom);
     }
 
-    function onWindowPointerMove(event: PointerEvent) {
-      if (pointersRef.current.length < 2) {
-        // console.log("Not enough pointers.");
-        return;
-      }
+    let initialDistance:number|null = null;
+    let initialZoom:number = 0;
 
-      if (event.pointerId !== pointersRef.current[0].id && event.pointerId !== pointersRef.current[1].id) {
-        // console.log("Is not the two first pointers");
-        return;
-      }
-
-      const [pointer1, pointer2] = pointersRef.current;
-
-      const startDistance = Math.sqrt((pointer1.startX - pointer2.startX) ** 2 + (pointer1.startY - pointer2.startY) ** 2);
-      const currentDistance = Math.sqrt((pointer1.x - pointer2.x) ** 2 + (pointer1.y - pointer2.y) ** 2);
-      const difference = currentDistance - startDistance;
-
-      //console.log("Pointers difference: ", difference/ window.innerWidth);
-      
-      const zoom = Math.max(
-        MIN_ZOOM,
-        Math.min(
-          pinchZoomStartRef.current + difference / window.innerWidth,
-          MAX_ZOOM
-        )
-      );
-
-      timelineZoomRef.current = zoom;
-      zoomJustChanged.current = true;
+    function getDistance(touch1:Touch, touch2:Touch) {
+      const dx = touch2.clientX - touch1.clientX;
+      const dy = touch2.clientY - touch1.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
     }
 
-    window.addEventListener('pointermove', onWindowPointerMove);
+    function onTouchStart(e:TouchEvent) {
+      if (e.touches.length > 1 && !initialDistance) {
+        const [touch1, touch2] = e.touches;
+        initialDistance = getDistance(touch1, touch2);
+        initialZoom = timelineZoomRef.current;
+        pinchingRef.current = true;
+      }
+    }
+
+    function onTouchMove(e:TouchEvent) {
+      if (e.touches.length === 2 && initialDistance) {
+        const currentDistance = getDistance(e.touches[0], e.touches[1]);
+        const scale = currentDistance / initialDistance;
+
+        const newZoom = Math.max(MIN_ZOOM, initialZoom + (scale - 1) / 2);
+
+        timelineZoomRef.current = Math.min(newZoom, MAX_ZOOM);
+        zoomJustChanged.current = true;
+      }
+    }
+
+    function onTouchEnd(e:TouchEvent) {
+      if (e.touches.length < 2) {
+        initialDistance = null;
+        initialZoom = 0;
+        pinchingRef.current = false;
+      }
+    }
+
     timelinePad.addEventListener('wheel', onTimelineWheel);
 
+    timelinePad.addEventListener('touchstart', onTouchStart);
+    timelinePad.addEventListener('touchend', onTouchEnd);
+    timelinePad.addEventListener('touchmove', onTouchMove);
+
     return () => {
-      window.removeEventListener('pointermove', onWindowPointerMove);
+      // window.removeEventListener('pointermove', onWindowPointerMove);
       timelinePad.removeEventListener('wheel', onTimelineWheel);
+      timelinePad.removeEventListener('touchstart', onTouchStart);
+      timelinePad.removeEventListener('touchend', onTouchEnd);
+      timelinePad.removeEventListener('touchmove', onTouchMove);
     }
   }, [duration]);
 
@@ -922,9 +1134,15 @@ function Timeline() {
           ref={timelinePadRef}
           className='overflow-hidden touch-none rounded-[8px] bg-gray-900 w-full h-[100%] max-h-[200px] relative'>
           
-          <canvas
-            ref={framesCanvasRef}
-            className='touch-none select-none outline-violet-900 outline-[4px] rounded-[8px] absolute left-1/2 -translate-y-1/2 top-1/2 h-[100%] max-h-[100px] bg-blue-300' />
+          <div
+            className='absolute left-1/2 top-1/2 -translate-y-1/2 w-fit h-[100%] max-h-[100px]'>
+            <canvas
+              ref={framesCanvasRef}
+              className='touch-none select-none outline-violet-900 outline-[4px] rounded-[8px] relative h-[100%] max-h-[100px] bg-blue-300'/>
+            <TimelineCutters
+              displacementRef={displacementRef}
+              settingGrabberRef={settingGrabberRef}/>
+          </div>
           
         </div>
 
@@ -945,7 +1163,7 @@ function Timeline() {
 
 function _app() {
 
-  const { video } = useVideoContext();
+  const { videoName } = useVideoContext();
 
 
   // useEffect(() => {
@@ -961,7 +1179,7 @@ function _app() {
     <div className="h-screen w-screen vbox py-8 max-w-[600px] mx-auto">
 
       <div className="hbox h-fit px-5 py-5 gap-4 items-center">
-        <span className='grow overflow-hidden text-ellipsis text-nowrap'>{video ? video.name : "..."}</span>
+        <span className='grow overflow-hidden text-ellipsis text-nowrap'>{videoName ? videoName : "..."}</span>
         <TaskUI/>
         <Button>Cut <ScissorsIcon/></Button>
         <MenuButton/>

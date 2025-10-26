@@ -5,8 +5,8 @@ type SetVideoReturnType = boolean;
 
 interface VideoContextMap {
 
+    readonly videoName?: string;
     readonly videoUrl?: string;
-    readonly video?: File;
     readonly playing: boolean;
     currentTime: number;
     readonly duration: number;
@@ -15,7 +15,7 @@ interface VideoContextMap {
 
     readonly doneCuts: [number, number, boolean][];
 
-    readonly setVideo: (video: File) => Promise<SetVideoReturnType>;
+    readonly setVideo: (video: string, videoName?:string) => Promise<SetVideoReturnType>;
     readonly play: () => void;
     readonly pause: () => void;
 
@@ -31,7 +31,7 @@ const VideContext = createContext<VideoContextMap|null>(null);
 export function VideoContextProvider({children}:{children:ReactNode}) {
 
 
-    const [video, setVideoState] = useState<File | undefined>();
+    const [videoName, setVideoName] = useState<string | undefined>(undefined);
     const [videoUrl, setVideoUrl] = useState<string|undefined>(undefined);
     const [playing, setPlaying] = useState(false);
     const [duration, setDuration] = useState(NaN);
@@ -40,16 +40,9 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
     const [doneCuts, setDoneCuts] = useState<VideoContextMap['doneCuts']>([]);
     const [cuttingRange, setCuttingRange] = useState<VideoContextMap['cuttingRange']>([NaN, NaN]);
 
-    async function setVideo(video: File): ReturnType<VideoContextMap['setVideo']> {
-        
-        if (!video.type.startsWith("video")) {
-            return false;
-        }
-        
+    async function setVideo(videoSrc: string, videoName:string = "Unknown"): ReturnType<VideoContextMap['setVideo']> { 
 
         try {
-
-            const url = URL.createObjectURL(video);
 
             await new Promise<void>((resolve, reject) => {
                 const videoElement = document.createElement('video');
@@ -69,13 +62,13 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
                     reject();
                 });
                     
-                videoElement.src = url;
+                videoElement.src = videoSrc;
                 videoElement.style.display = 'none';
                 document.body.appendChild(videoElement);
             });
             
-            setVideoState(video);
-            setVideoUrl(url);
+            setVideoName(videoName);
+            setVideoUrl(videoSrc);
             setPlaying(false);
             currentTimeRef.current = 0;
             setDoneCuts([]);
@@ -103,8 +96,8 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
     }
 
     const value: VideoContextMap = {
+        videoName,
         videoUrl,
-        video,
         playing,
         duration,
 

@@ -11,6 +11,7 @@ type PickVideoCallbackData = {
     type: 2;
     success: true;
     fileName: string;
+    filePath: string;
 } | {
     type: 2;
     success: false

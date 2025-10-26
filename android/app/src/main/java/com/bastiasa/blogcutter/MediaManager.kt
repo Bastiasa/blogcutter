@@ -18,6 +18,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 
 @CapacitorPlugin(name = "MediaManager")
 class MediaManager:Plugin() {
@@ -51,14 +52,20 @@ class MediaManager:Plugin() {
         val stream = resolver.openInputStream(pickedVideo)
 
         val videoFile = File(context.cacheDir, "video.$extension")
-        val optimizedVideoFile = File(context.cacheDir, "optimized.mp4")
+        val optimizedVideoFile = File.createTempFile("optimized_video", ".mp4", context.cacheDir)
 
-        stream.use {
-            if (!videoFile.exists()) {
-                videoFile.createNewFile()
+        stream!!.use { input ->
+
+            FileOutputStream(videoFile).use { output->
+                val buffer = ByteArray(32 * 1024)
+                var bytesRead:Int
+
+                while(input.read(buffer).also { bytesRead = it } != -1 ) {
+                    output.write(buffer, 0, bytesRead)
+                }
+
+                output.flush()
             }
-
-            videoFile.writeBytes(it!!.readBytes())
         }
 
 
@@ -103,26 +110,26 @@ class MediaManager:Plugin() {
                     log("Finished but the optimized video file doesn't exists")
                 }
 
-                FileInputStream(optimizedVideoFile).use { input ->
-                    val chunkSize = 1024 * 256
-                    val buffer = ByteArray(chunkSize)
-                    var bytesRead:Int
-
-                    while(input.read(buffer).also { bytesRead = it } != -1) {
-                        val chunk = buffer.copyOf()
-                        val encodedChunk = Base64.encodeToString(chunk, Base64.NO_WRAP)
-
-                        call.resolve(
-                            JSObject().apply {
-                                put("type", PICK_TYPE_CHUNK)
-                                put("chunk", encodedChunk)
-                                put("totalSize", optimizedVideoFile.length())
-                            }
-                        )
-
-                        //log("Chunk sent: ${encodedChunk.length} bytes")
-                    }
-                }
+//                FileInputStream(optimizedVideoFile).use { input ->
+//                    val chunkSize = 1024 * 256
+//                    val buffer = ByteArray(chunkSize)
+//                    var bytesRead:Int
+//
+//                    while(input.read(buffer).also { bytesRead = it } != -1) {
+//                        val chunk = buffer.copyOf()
+//                        val encodedChunk = Base64.encodeToString(chunk, Base64.NO_WRAP)
+//
+//                        call.resolve(
+//                            JSObject().apply {
+//                                put("type", PICK_TYPE_CHUNK)
+//                                put("chunk", encodedChunk)
+//                                put("totalSize", optimizedVideoFile.length())
+//                            }
+//                        )
+//
+//                        //log("Chunk sent: ${encodedChunk.length} bytes")
+//                    }
+//                }
 
                 val cursor = resolver.query(pickedVideo, null, null, null, null)
                 var fileName:String = "Unknown.mp4"
@@ -139,6 +146,7 @@ class MediaManager:Plugin() {
                         put("type", PICK_TYPE_ENDED)
                         put("success", true)
                         put("fileName", fileName)
+                        put("filePath", optimizedVideoFile.absolutePath)
                     }
                 )
                 log("Video was successfully optimized")
