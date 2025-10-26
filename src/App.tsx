@@ -7,8 +7,8 @@ import {
   PanelResizeHandle,
 } from "react-resizable-panels";
 
-import { useVideoContext, VideoContextProvider, type VideoContextMap } from './VideoContext';
-import { CheckIcon, ExternalLinkIcon, ListCheckIcon, MaximizeIcon, MenuIcon, MinimizeIcon, PauseIcon, PlayIcon, RedoIcon, ScissorsIcon, TriangleIcon, UndoIcon } from 'lucide-react';
+import { useVideoContext, VideoContextProvider, type DoneCut, type VideoContextMap } from './VideoContext';
+import { CheckIcon, CircleAlertIcon, ExternalLinkIcon, ListCheckIcon, MaximizeIcon, MenuIcon, MinimizeIcon, PauseIcon, PlayIcon, RedoIcon, ScissorsIcon, TriangleIcon, UndoIcon } from 'lucide-react';
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from './components/ui/button';
 import { Spinner } from './components/ui/spinner';
@@ -59,44 +59,50 @@ function clamp(value:number, min:number, max:number) {
 
 function TaskUI() {
 
-
   const { doneCuts, isCutting } = useVideoContext();
-
-
-
-  
 
   return (
 
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button  
-          disabled={doneCuts.length <= 0}
+          disabled={doneCuts.size <= 0}
           variant={'ghost'}>
           
           {isCutting() ? <Spinner /> :
-            (doneCuts.length > 0 ? <ListCheckIcon /> : undefined)}
+            (doneCuts.size > 0 ? <ListCheckIcon /> : undefined)}
         </Button>
       </DropdownMenuTrigger>
 
 
       <DropdownMenuContent>
         <DropdownMenuGroup>
-          {doneCuts.map((cutData, i) => {
+          {Array.from(doneCuts).map((doneCutDataAndId, index) => {
+
+            const cutId = doneCutDataAndId[0];
+            const cutData = doneCutDataAndId[1];
+
+            function onOpenClicked() {
+              if (cutData[3]) {
+                MediaManager.openVideo({ uri: cutData[3] });
+              }
+            }
+
             return <DropdownMenuItem
-              key={i}
+              key={cutId}
               className='hover:bg-popover! hbox w-screen max-w-[256px] gap-2 pointer-events-auto'>
               
               <div className='grow min-w-0'>
-                <span className='opacity-60'>{i+1}.</span> <span>{formatTime(cutData[0])}</span> - <span>{formatTime(cutData[1])}</span>
+                <span className='opacity-60'>{index+1}.</span> <span>{formatTime(cutData[0])}</span> - <span>{formatTime(cutData[1])}</span>
               </div>
 
               <Button
-                disabled={!cutData[2]}
-                variant={'ghost'}>
+                disabled={cutData[2] !== 'done'}
+                variant={'ghost'}
+                onClick={onOpenClicked}>
                 <ExternalLinkIcon />
               </Button>
-              {cutData[2] ? <CheckIcon /> : <Spinner />}              
+              {cutData[2] == 'done' ? <CheckIcon /> : (cutData[2] == 'trimming' ? <Spinner /> : <CircleAlertIcon/>)}              
 
             </DropdownMenuItem>
           })}
@@ -116,9 +122,8 @@ function MenuButton() {
   ];
 
 
-  const { setVideo, isCutting } = useVideoContext();
+  const { setVideo, isCutting, setAlertData } = useVideoContext();
 
-  type AlertData = { open: false } | { open: true; title: string; text: string; onAccept?: () => void; onCancel?: () => void, acceptText?:string, cancelText?:string };
   type LoadingData = {
     enabled:false
   } | {
@@ -127,7 +132,6 @@ function MenuButton() {
   }
 
   const [loadingData, setLoadingData] = useState<LoadingData>({enabled:false});
-  const [alertData, setAlertData] = useState<AlertData>({open:false});
   const [sheetOpen, setSheetOpen] = useState(false);
 
   function openVideoInAndroid() {
@@ -326,50 +330,7 @@ function MenuButton() {
         </SheetContent>
     </Sheet>
       
-    <AlertDialog
-      open={alertData.open}>
-      
-      <AlertDialogContent>
-        {alertData.open &&
-        
-          <>
-
-            <AlertDialogHeader>
-              <AlertDialogTitle>{alertData.title}</AlertDialogTitle>
-              <AlertDialogDescription>{alertData.text}</AlertDialogDescription>
-            </AlertDialogHeader>
-            
-            <AlertDialogFooter>
-              {alertData.onCancel !== undefined && 
-                
-                <AlertDialogCancel
-                  onPointerUp={() => {
-                    alertData.onCancel?.();
-                    setAlertData({ open: false })
-                  }}>
-                  {alertData.cancelText ?? "No"}
-                </AlertDialogCancel>
-              }
-              
-              {alertData.onAccept !== undefined &&
-              
-                <AlertDialogAction
-                  onPointerUp={() => {
-                    alertData.onAccept?.();
-                    setAlertData({ open: false })
-                  }}>
-                  {alertData.acceptText ?? "Yes"}
-                </AlertDialogAction>
-              }
-              
-            </AlertDialogFooter>
-          
-          </>
-        
-        }
-      </AlertDialogContent>
-      
-      </AlertDialog>
+    
       
 
     {loadingData.enabled && <div className="fixed px-12 z-50 inset-0 bg-secondary vbox justify-center items-center">
@@ -559,6 +520,8 @@ function VideoPreview() {
 
 function Controls() {
 
+  const videoContext = useVideoContext();
+
   const {
     fullscreen,
     setFullscreen,
@@ -566,8 +529,11 @@ function Controls() {
     pause,
     playing,
     videoUrl,
-    videoMetadata
-  } = useVideoContext();
+    videoMetadata,
+    duration
+  } = videoContext;
+
+  const currentTimeSpanRef = useRef<HTMLSpanElement>(null);
 
   function onPlaybackSwitchClicked() {
     
@@ -582,15 +548,40 @@ function Controls() {
     setFullscreen(!fullscreen);
   }
 
+  useEffect(() => { 
+
+    let loopId = -1;
+
+    const loop = () => {
+      loopId = requestAnimationFrame(loop);
+      
+      if (currentTimeSpanRef.current) {
+        currentTimeSpanRef.current.textContent = formatTime(videoContext.currentTime);
+      }
+    }
+
+    loop();
+
+    return () => {
+      cancelAnimationFrame(loopId);
+    }
+
+  }, []);
+
   
   return <>
     
     {videoMetadata &&
     
     
-      <span className='absolute left-4 text-xs text-gray-600'>
-        {Math.floor(videoMetadata.width)}x{Math.floor(videoMetadata.height)} {formatSize(videoMetadata.size)}
-      </span>
+      <div className='absolute left-4 text-xs text-gray-600'>
+        <p>
+          {Math.floor(videoMetadata.width)}x{Math.floor(videoMetadata.height)} {formatSize(videoMetadata.size)}
+        </p>
+        <p>
+          <span ref={currentTimeSpanRef}></span>/{formatTime(duration)}
+        </p>
+      </div>
     
     }
 
@@ -670,25 +661,7 @@ function TimelineCutters({
       let left = videoContext.trimStart - displacementRef.current - grabberThickness;
 
       let width = clamp((videoContext.trimEnd - videoContext.trimStart) + grabberThickness*2, 0, 1+grabberThickness*2);
-
-      // left = clamp(
-      //   left,
-      //   -displacementRef.current,
-      //   videoContext.trimEnd - displacementRef.current - grabberThickness
-      // );
       
-
-      // console.log(
-      //   Math.floor((-displacementRef.current) * 100),
-      //   Math.floor(left * 100),
-      //   Math.floor((videoContext.trimEnd - displacementRef.current - grabberThickness) * 100)
-      // );
-      
-      console.log(
-        Math.floor(width * 100)
-      );
-      
-
       cutElement.style.left = `${left * 100}%`;
       cutElement.style.width = `${width * 100}%`;
       
@@ -1265,19 +1238,25 @@ function _app() {
   const {
     videoName,
     duration,
-    
+    addDoneCut,
+    removeDoneCut,
+    setDoneCut,
+    setAlertData
   } = videoContext;
 
   function onCutButtonPressed() {
 
     const startTime = videoContext.trimStart * duration
-    const endTime = videoContext.trimStart * duration
+    const endTime = videoContext.trimEnd * duration
 
-    const process: VideoContextMap["doneCuts"][number] = [
+    const process: DoneCut = [
       startTime,
       endTime,
-      'trimming'
+      'trimming',
+      undefined
     ];
+
+    const doneCutId = addDoneCut(process);
 
     MediaManager.makeTrim({
       start: Math.floor(startTime * 1000),
@@ -1286,10 +1265,29 @@ function _app() {
       
       if (data.code == 4) {
         process[2] = 'done';
+        process[3] = data.uri;
+        setDoneCut(process, doneCutId);
       } else if (data.code == 3) {
-        process[2] = 'failed'
+        process[2] = 'failed';
+        setDoneCut(process, doneCutId);
       } else if (data.code == 0) {
-        document.write("FUCK!");
+        setAlertData({
+          open: true,
+          title:"Hold on!",
+          text: "You haven't selected a folder to save the clips.",
+          acceptText: "Pick folder",
+          cancelText: "Cancel",
+
+          onAccept() {
+            removeDoneCut(doneCutId);
+            MediaManager.pickFolder()
+              .then(onCutButtonPressed);
+          },
+
+          onCancel() {
+            removeDoneCut(doneCutId);
+          }
+        })
       }
 
     });

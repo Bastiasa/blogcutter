@@ -1,5 +1,6 @@
 package com.bastiasa.blogcutter
 
+import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.MediaStore.MediaColumns
@@ -41,6 +42,7 @@ class MediaManager:Plugin() {
 
     private lateinit var pickVideoActivity:ActivityResultLauncher<PickVisualMediaRequest>
     private var currentVideoPickCall:PluginCall? = null
+    private var folderPickCall: PluginCall? = null
 
     private var currentVideo:File? = null
     private var clipsFolderUri:Uri? = null
@@ -51,6 +53,17 @@ class MediaManager:Plugin() {
 
     private fun log(message: String) {
         Log.d("Capacitor/MediaManager", message)
+    }
+
+    fun resolveCall(call: PluginCall, arguments:Map<String, Any>? = null) {
+
+        val jsObject = JSObject()
+
+        arguments?.keys?.forEach { key ->
+            jsObject.put(key, arguments[key])
+        }
+
+        call.resolve(jsObject)
     }
 
     private fun canAccessFolder():Boolean{
@@ -231,20 +244,35 @@ class MediaManager:Plugin() {
         pickFolderActivity = activity.registerForActivityResult(
             ActivityResultContracts.OpenDocumentTree()
         ) { folderUri ->
+
             clipsFolderUri = folderUri
+
+            folderPickCall?.let {
+                resolveCall(it)
+                bridge.releaseCall(it)
+                folderPickCall = null
+            }
         }
     }
 
+    @PluginMethod
+    fun openVideo(call: PluginCall) {
 
-    fun resolveCall(call: PluginCall, arguments:Map<String, Any>) {
+        val uri = call.getString("uri")
 
-        val jsObject = JSObject()
-
-        arguments.keys.forEach { key ->
-            jsObject.put(key, arguments.get(key))
+        if (uri == null) {
+            return
         }
 
-        call.resolve(jsObject)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(uri), "video/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        val chooser = Intent.createChooser(intent, "Open with...")
+        activity.startActivity(chooser)
+
+        call.resolve()
     }
 
     @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
@@ -262,26 +290,43 @@ class MediaManager:Plugin() {
 
     @PluginMethod
     fun pickFolder(call:PluginCall) {
+        bridge.saveCall(call)
+        folderPickCall = call
         pickFolderActivity.launch(null)
     }
 
     @PluginMethod
     fun makeTrim(call:PluginCall) {
 
-        val start = call.getString("start")?.toLong();
-        val end = call.getString("end")?.toLong();
+        log("Trim request")
+
+        bridge.saveCall(call)
+
+        val resolveCall = { code:Int ->
+            this@MediaManager.resolveCall(
+                call,
+                mapOf(
+                    "code" to code
+                )
+            )
+
+            bridge.releaseCall(call)
+        }
+
+        val start = call.getInt("start")?.toLong()
+        val end = call.getInt("end")?.toLong()
         lateinit var folder:DocumentFile
 
         if (start == null || end == null) {
-
-            resolveCall(call, mapOf(
-                "code" to MAKE_TRIM_INVALID_ARGS
-            ))
-
+            log("Invalid start and end arguments. Trim cancelled")
+            resolveCall(MAKE_TRIM_INVALID_ARGS)
             return
         }
 
         if (currentVideo == null) {
+
+            log("There is not a video file. Trim cancelled")
+
             resolveCall(call, mapOf(
                 "code" to MAKE_TRIM_UNSELECTED_VIDEO
             ))
@@ -289,18 +334,14 @@ class MediaManager:Plugin() {
         }
 
         if (clipsFolderUri == null || !canAccessFolder()) {
-            resolveCall(call, mapOf(
-                "code" to MAKE_TRIM_FOLDER_ERROR
-            ))
-
+            resolveCall(MAKE_TRIM_FOLDER_ERROR)
             return
         } else {
-            val givenFolder = DocumentFile.fromTreeUri(context, clipsFolderUri)
+            val givenFolder = DocumentFile.fromTreeUri(context, clipsFolderUri!!)
 
             if (givenFolder == null) {
-                resolveCall(call, mapOf(
-                    "code" to MAKE_TRIM_FOLDER_ERROR
-                ))
+                log("It seems there is not a folder for save clips. Trim cancelled")
+                resolveCall(MAKE_TRIM_FOLDER_ERROR)
                 return
             }
             folder = givenFolder
@@ -313,8 +354,14 @@ class MediaManager:Plugin() {
                 "clip-$clipId.${currentVideo!!.extension}"
             ) as DocumentFile
 
-        val currentVideoFd = FileInputStream(currentVideo!!).also { it.close() }.fd
+        val fullVideoInputStream = FileInputStream(currentVideo!!)
+        val currentVideoFd = fullVideoInputStream.fd
         val clipFileDescriptor = activity.contentResolver.openFileDescriptor(clipFile.uri, "w")
+
+        val close = {
+            fullVideoInputStream.close()
+            clipFileDescriptor?.close()
+        }
 
         val listener = object : Mp4Composer.Listener {
             override fun onProgress(progress: Double) {
@@ -325,21 +372,25 @@ class MediaManager:Plugin() {
             }
 
             override fun onCompleted() {
+                log("Trim completed successfully!")
+                close()
                 resolveCall(call, mapOf(
-                    "code" to MAKE_TRIM_ENDED
+                    "code" to MAKE_TRIM_ENDED,
+                    "uri" to clipFile.uri.toString()
                 ))
             }
 
             override fun onCanceled() {
-                resolveCall(call, mapOf(
-                    "code" to MAKE_TRIM_FAILED
-                ))
+                log("Trim cancelled")
+                close()
+                resolveCall(MAKE_TRIM_FAILED)
             }
 
             override fun onFailed(exception: java.lang.Exception?) {
-                resolveCall(call, mapOf(
-                    "code" to MAKE_TRIM_FAILED
-                ))
+                log("Trim failed")
+                exception?.printStackTrace()
+                close()
+                resolveCall(MAKE_TRIM_FAILED)
             }
 
         }

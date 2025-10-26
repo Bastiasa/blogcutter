@@ -1,7 +1,16 @@
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { generateOptimizedVideo } from "./lib/mediaManager";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialogFooter, AlertDialogHeader } from "./components/ui/alert-dialog";
 
 type SetVideoReturnType = boolean;
+export type DoneCut = [
+    startTime: number,
+    endTime: number,
+    status: 'trimming' | 'done' | 'failed',
+    uri:string|undefined
+];
+type AlertData = { open: false } | { open: true; title: string; text: string; onAccept?: () => void; onCancel?: () => void, acceptText?:string, cancelText?:string };
 
 export interface VideoContextMap {
 
@@ -18,7 +27,7 @@ export interface VideoContextMap {
     readonly fullscreen: boolean;
     readonly cuttingRange: [number, number];
 
-    readonly doneCuts: [startTime: number, endTime: number, status: 'trimming'|'done'|'failed'][];
+    readonly doneCuts: Map<number,  DoneCut>;
 
     currentTime: number;
 
@@ -34,6 +43,11 @@ export interface VideoContextMap {
 
     readonly isCutting: () => boolean;
     readonly setCuttingRange: (cuttingRange: VideoContextMap['cuttingRange']) => void;
+
+    setDoneCut(doneCut: DoneCut, id: number): void;
+    addDoneCut(doneCut: DoneCut): number;
+    removeDoneCut(id: number): void;
+    setAlertData(alerData: AlertData): void;
 
 }
 
@@ -55,8 +69,11 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
     const [playing, setPlaying] = useState(false);
     const [duration, setDuration] = useState(NaN);
     const [fullscreen, setFullscreen] = useState(false);
-    const [doneCuts, setDoneCuts] = useState<VideoContextMap['doneCuts']>([]);
+    const [doneCuts, setDoneCuts] = useState<VideoContextMap['doneCuts']>(new Map());
     const [cuttingRange, setCuttingRange] = useState<VideoContextMap['cuttingRange']>([NaN, NaN]);
+    const [alertData, setAlertData] = useState<AlertData>({ open: false });
+    
+    const cutIdRef = useRef(0);
 
     const currentTimeRef = useRef(0);
     const trimStartRef = useRef(0);
@@ -120,7 +137,7 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
             setVideoUrl(videoSrc);
             setPlaying(false);
             currentTimeRef.current = 0;
-            setDoneCuts([]);
+            setDoneCuts(new Map());
             setCuttingRange([0, duration]);
             console.log("Process finished");
         } catch (error) {
@@ -133,10 +150,39 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
         return true;
     }
 
+    function setDoneCut(doneCut:DoneCut, id:number) {
+        setDoneCuts(lastDoneCuts => {
+            const mapCopy = new Map(lastDoneCuts);
+            mapCopy.set(id, doneCut);
+            return mapCopy;
+        });
+    }
+
+    function addDoneCut(doneCut: DoneCut) {
+        cutIdRef.current++;
+        const doneCutId = cutIdRef.current;
+
+        setDoneCuts(lastDoneCuts => {
+            const mapCopy = new Map(lastDoneCuts);
+            mapCopy.set(doneCutId, doneCut);
+            return mapCopy;
+        });
+
+        return doneCutId;
+    }
+
+    function removeDoneCut(id:number) {
+        setDoneCuts(lastDoneCuts => {
+            const mapCopy = new Map(lastDoneCuts);
+            mapCopy.delete(id);
+            return mapCopy;
+        });
+    }
+
     function isCutting() {
         
         for (const cutData of doneCuts) {
-            if (!cutData[2]) {
+            if (cutData[1][2] === 'trimming' ) {
                 return true;
             }
         }
@@ -150,6 +196,7 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
         videoUrl,
         playing,
         duration,
+        setAlertData,
         
         set trimStart(value: number) {
             setTrimStart(value);
@@ -192,11 +239,60 @@ export function VideoContextProvider({children}:{children:ReactNode}) {
         setFullscreen,
 
         isCutting,
-        setCuttingRange
+        setDoneCut,
+        setCuttingRange,
+        addDoneCut,
+        removeDoneCut
     };
 
     return <VideContext.Provider value={value}>
         {children}
+
+
+        <AlertDialog
+            open={alertData.open}>
+        
+        <AlertDialogContent>
+            {alertData.open &&
+            
+            <>
+
+                <AlertDialogHeader>
+                <AlertDialogTitle>{alertData.title}</AlertDialogTitle>
+                <AlertDialogDescription>{alertData.text}</AlertDialogDescription>
+                </AlertDialogHeader>
+                
+                <AlertDialogFooter>
+                {alertData.onCancel !== undefined && 
+                    
+                    <AlertDialogCancel
+                    onPointerUp={() => {
+                        alertData.onCancel?.();
+                        setAlertData({ open: false })
+                    }}>
+                    {alertData.cancelText ?? "No"}
+                    </AlertDialogCancel>
+                }
+                
+                {alertData.onAccept !== undefined &&
+                
+                    <AlertDialogAction
+                    onPointerUp={() => {
+                        alertData.onAccept?.();
+                        setAlertData({ open: false })
+                    }}>
+                    {alertData.acceptText ?? "Yes"}
+                    </AlertDialogAction>
+                }
+                
+                </AlertDialogFooter>
+            
+            </>
+            
+            }
+        </AlertDialogContent>
+        
+        </AlertDialog>
     </VideContext.Provider>
 }
 
