@@ -641,7 +641,8 @@ function TimelineCutters({
     const { cutElement } = getElements();
 
 
-    let editingGrabber:[mark: Grabber, id: number]|null = null;
+    let editingGrabber: [mark: Grabber, pointerId: number] | null = null;
+    let bothGrabbers:[initialPercentagePosition:number, initialBegin:number, intialEnd:number, pointerId:number]|null = null;
     let loopId = -1;
 
     const loop = () => {
@@ -677,6 +678,22 @@ function TimelineCutters({
       }
     }
 
+    function isInsideCutElement({clientX, clientY}:{clientX:number, clientY:number}) {
+      const rect = cutElement.getBoundingClientRect();
+      
+      const isInX = clientX > rect.left && clientX < rect.right;
+      const isInY = clientY > rect.top && clientY < rect.bottom;
+
+      return isInX && isInY;
+    }
+
+    function clientXToPercentage(clientX:number) {
+      const canvasElement = framesCanvasRef.current as HTMLCanvasElement;
+      const canvasRect = canvasElement.getBoundingClientRect();
+      const percentagePosition = ((clientX - canvasRect.left) / canvasRect.width);
+      return percentagePosition;
+    }
+
     function onWindowPointerDown(e: PointerEvent) {
       const grabbed = getHoveredGrabber(e);
 
@@ -686,6 +703,14 @@ function TimelineCutters({
           e.pointerId
         ];
 
+        settingGrabberRef.current = true;
+      } else if (isInsideCutElement(e)) {
+        bothGrabbers = [
+          clientXToPercentage(e.clientX),
+          beginRef.current,
+          endRef.current,
+          e.pointerId
+        ];
         settingGrabberRef.current = true;
       }
     }
@@ -697,6 +722,17 @@ function TimelineCutters({
       } else {
         document.body.style.cursor = '';
       }
+
+      if (bothGrabbers && e.pointerId == bothGrabbers[3]) {
+        
+        const percentagePosition = clientXToPercentage(e.clientX);
+        const difference = percentagePosition - bothGrabbers[0];
+
+        setBegin(bothGrabbers[1] + difference);
+        setEnd(bothGrabbers[2] + difference);
+
+        return;
+      }
       
       if (!editingGrabber) {
         return;
@@ -705,13 +741,8 @@ function TimelineCutters({
       if (editingGrabber[1] !== e.pointerId) {
         return;
       }
-
-      const canvasElement = framesCanvasRef.current as HTMLCanvasElement;
-      const movementX = e.movementX / window.innerWidth;
-
-      const canvasRect = canvasElement.getBoundingClientRect();
-
-      const percentagePosition = ((e.clientX - canvasRect.left) / canvasRect.width);
+      
+      const percentagePosition = clientXToPercentage(e.clientX);
       
       switch (editingGrabber[0]) {
         case 'left':
@@ -729,6 +760,11 @@ function TimelineCutters({
       if (editingGrabber !== null) {
         editingGrabber = null;
         settingGrabberRef.current = false; 
+      }
+
+      if (bothGrabbers) {
+        bothGrabbers = null;        
+        settingGrabberRef.current = false;
       }
 
     }
@@ -756,7 +792,7 @@ function TimelineCutters({
       
       <div
         ref={cutElementRef}
-        className='border-l-8 border-l-white rounded-2xl border-r-8 border-r-white bg-[#307fd89f] h-full top-0 absolute box-border'>
+        className='border-l-8 border-l-white rounded-[8px] border-r-8 border-r-white bg-[#307fd89f] h-full top-0 absolute box-border'>
 
       </div>
     
