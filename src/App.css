@@ -1,0 +1,12 @@
+.hbox,
+.vbox {
+  display: flex;
+}
+
+.hbox {
+  flex-direction: row;
+}
+
+.vbox {
+  flex-direction: column;
+}

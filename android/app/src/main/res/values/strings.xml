@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BlogCutter</string>
+    <string name="title_activity_main">BlogCutter</string>
+    <string name="package_name">com.bastiasa.blogcutter</string>
+    <string name="custom_url_scheme">com.bastiasa.blogcutter</string>
+</resources>
