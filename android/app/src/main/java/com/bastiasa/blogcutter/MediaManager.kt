@@ -249,6 +249,7 @@ class MediaManager:Plugin() {
                     )
                 )
 
+                currentVideoPickCall = null
                 currentVideo = videoFile
 
                 if (optimizedVideoFile.exists()) {
