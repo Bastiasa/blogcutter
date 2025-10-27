@@ -124,11 +124,15 @@ function MenuButton() {
 
   const { setVideo, isCutting, setAlertData } = useVideoContext();
 
+
   type LoadingData = {
     enabled:false
   } | {
     enabled: true;
-    progress?: number
+    progress?: number;
+    title?: string;
+    optionButtons?: [text: string, command: string][];
+    onOptionButton?(command: string): void;
   }
 
   const [loadingData, setLoadingData] = useState<LoadingData>({enabled:false});
@@ -136,15 +140,46 @@ function MenuButton() {
 
   function openVideoInAndroid() {
 
+    const loadingDataStaticValues: LoadingData = {
+      enabled:true,
+      title:"Compressing...",
+
+      optionButtons: [
+        ["Skip", "skip"],
+        ["Cancel", "cancel"]
+      ],
+
+      onOptionButton(command) {
+          switch (command) {
+            case "skip":
+              MediaManager.skipCompression();
+              break;
+            case "cancel":
+              MediaManager.cancelVideoPicking();
+              break;
+          }
+      }
+    }
+
     MediaManager.pickVideoFile(async (data) => {
       
       switch (data.type) {
         case 0:
 
-          setLoadingData(v => ({
-            enabled: true,
-            progress: data.progress * 100
-          }));
+
+
+          setLoadingData(last => {
+            if (last.enabled && last.optionButtons && last.onOptionButton) {
+              return {
+                ...last,
+                progress:data.progress
+              }
+            }
+            return {
+              ...loadingDataStaticValues,
+              progress:data.progress
+            }
+          });
           
           break;
         
@@ -342,13 +377,30 @@ function MenuButton() {
     
       
 
-    {loadingData.enabled && <div className="fixed px-12 z-50 inset-0 bg-secondary vbox justify-center items-center">
-        {(loadingData.progress == undefined || !isFinite(loadingData.progress)) && <Spinner/>}
+    {loadingData.enabled && <div className="fixed px-12 z-50 inset-0 bg-secondary vbox gap-4 justify-center items-center">
+        {(loadingData.progress == undefined || !isFinite(loadingData.progress)) && <Spinner />}
+        
+        {loadingData.title && <h1>{loadingData.title}</h1>}
         
         {isFinite(loadingData.progress ?? NaN) &&
           <Progress
             value={loadingData.progress}
-            className='w-full'/>}
+            className='w-full' />}
+        
+        <div className="hbox gap-4">
+
+          {loadingData.optionButtons?.map(
+            (optionButtonInfo, index) => {
+              
+              return <Button
+                onClick={()=>loadingData.onOptionButton?.(optionButtonInfo[1])}
+                key={index}>
+                {optionButtonInfo[0]}
+              </Button>
+            }
+          )}
+
+        </div>
     </div>}
     
     </>

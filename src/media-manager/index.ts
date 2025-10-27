@@ -32,6 +32,8 @@ export interface MediaManager {
     pickFolder(): Promise<void>;
     makeTrim(args: { start: number, end: number }): Promise<TrimVideoReturnType>;
     openVideo(args: { uri: string }): Promise<void>;
+    cancelVideoPicking(): Promise<void>;
+    skipCompression(): Promise<void>;
 }
 
 export const MediaManager = registerPlugin<MediaManager>('MediaManager');

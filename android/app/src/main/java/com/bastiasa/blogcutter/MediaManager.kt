@@ -29,6 +29,7 @@ class MediaManager:Plugin() {
     val PICK_TYPE_PROGRESS = 0
     val PICK_TYPE_ENDED = 1
     val PICK_TYPE_CANCELLED = 2
+    val PICK_TYPE_BUSY = 3
 
     val MAKE_TRIM_FOLDER_ERROR = 0
     val MAKE_TRIM_INVALID_ARGS = 1
@@ -214,7 +215,45 @@ class MediaManager:Plugin() {
 
             override fun onCanceled() {
                 log("MP4Composer cancelled")
-                finished(false)
+
+                if (currentVideoPickCall != call) {
+                    resolveCall(
+                        call,
+                        mapOf(
+                            "type" to PICK_TYPE_CANCELLED
+                        )
+                    )
+                    return
+                }
+
+                val cursor = resolver.query(pickedVideo, null, null, null, null)
+                var fileName:String = "Unknown.mp4"
+
+                cursor?.use {
+                    val nameIndex = it.getColumnIndex(MediaColumns.DISPLAY_NAME)
+                    if (nameIndex != -1 && it.moveToFirst()) {
+                        fileName = it.getString(nameIndex)
+                    }
+                }
+
+                resolveCall(
+                    call,
+                    mapOf(
+                        "type" to PICK_TYPE_ENDED,
+                        "success" to true,
+                        "fileName" to fileName,
+                        "filePath" to videoFile.absolutePath,
+                        "width" to videoNaturalWidth,
+                        "height" to videoNaturalHeight,
+                        "size" to videoFile.length()
+                    )
+                )
+
+                currentVideo = videoFile
+
+                if (optimizedVideoFile.exists()) {
+                    optimizedVideoFile.delete()
+                }
             }
 
             override fun onFailed(exception: Exception?) {
@@ -273,8 +312,6 @@ class MediaManager:Plugin() {
                 }
             }
 
-
-            currentVideoPickCall = null
         }
 
         pickFolderActivity = activity.registerForActivityResult(
@@ -313,6 +350,14 @@ class MediaManager:Plugin() {
 
     @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
     fun pickVideoFile(call:PluginCall) {
+
+        if (currentVideoPickCall != null) {
+            resolveCall(call, mapOf(
+                "type" to PICK_TYPE_BUSY
+            ))
+            return
+        }
+
         currentVideoPickCall = call
         call.setKeepAlive(true);
         bridge.saveCall(call)
@@ -441,4 +486,16 @@ class MediaManager:Plugin() {
 
     }
 
+    @PluginMethod
+    fun skipCompression(call:PluginCall) {
+        composer?.cancel()
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun cancelVideoPicking(call:PluginCall) {
+        currentVideoPickCall = null
+        composer?.cancel()
+        call.resolve()
+    }
 }
