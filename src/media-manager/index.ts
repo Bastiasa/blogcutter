@@ -14,6 +14,8 @@ type PickVideoCallbackData = {
 } | {
     type: 1;
     success: false
+} | {
+    type: 2
 }
 
 type TrimVideoReturnType = {

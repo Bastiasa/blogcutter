@@ -137,10 +137,11 @@ function MenuButton() {
   function openVideoInAndroid() {
 
     MediaManager.pickVideoFile(async (data) => {
+      
       switch (data.type) {
         case 0:
 
-          setLoadingData(v =>({
+          setLoadingData(v => ({
             enabled: true,
             progress: data.progress * 100
           }));
@@ -153,7 +154,7 @@ function MenuButton() {
 
           setLoadingData({
             enabled: true,
-            progress:1
+            progress: 1
           });
 
           if (data.success) {
@@ -189,7 +190,15 @@ function MenuButton() {
 
               acceptText: "Ok"
             });
-          } 
+          }
+          break;
+          
+        case 2:
+
+          setLoadingData(v => ({
+            enabled: false
+          }));
+
           break;
       }
     });

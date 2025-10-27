@@ -28,6 +28,7 @@ class MediaManager:Plugin() {
 
     val PICK_TYPE_PROGRESS = 0
     val PICK_TYPE_ENDED = 1
+    val PICK_TYPE_CANCELLED = 2
 
     val MAKE_TRIM_FOLDER_ERROR = 0
     val MAKE_TRIM_INVALID_ARGS = 1
@@ -131,47 +132,58 @@ class MediaManager:Plugin() {
         val finished =  { success:Boolean  ->
 
             if (!success) {
-                call.resolve(
-                    JSObject().apply {
-                        put("type", PICK_TYPE_ENDED)
-                        put("success", false)
-                    }
+                resolveCall(
+                    call,
+                    mapOf(
+                        "type" to PICK_TYPE_ENDED,
+                        "success" to false
+                    )
                 )
                 log("MP4Composer failed")
             } else {
 
                 if (!optimizedVideoFile.exists()) {
-                    JSObject().apply {
-                        put("type", PICK_TYPE_ENDED)
-                    }
+                    resolveCall(
+                        call,
+                        mapOf(
+                            "type" to PICK_TYPE_ENDED,
+                            "success" to false
+                        )
+                    )
+
                     log("Finished but the optimized video file doesn't exists")
                 }
+                else {
+                    val cursor = resolver.query(pickedVideo, null, null, null, null)
+                    var fileName:String = "Unknown.mp4"
 
-                val cursor = resolver.query(pickedVideo, null, null, null, null)
-                var fileName:String = "Unknown.mp4"
-
-                cursor?.use {
-                    val nameIndex = it.getColumnIndex(MediaColumns.DISPLAY_NAME)
-                    if (nameIndex != -1 && it.moveToFirst()) {
-                        fileName = it.getString(nameIndex)
+                    cursor?.use {
+                        val nameIndex = it.getColumnIndex(MediaColumns.DISPLAY_NAME)
+                        if (nameIndex != -1 && it.moveToFirst()) {
+                            fileName = it.getString(nameIndex)
+                        }
                     }
+
+
+                    resolveCall(
+                        call,
+                        mapOf(
+                            "type" to PICK_TYPE_ENDED,
+                            "success" to true,
+                            "fileName" to fileName,
+                            "filePath" to optimizedVideoFile.absolutePath,
+                            "width" to videoNaturalWidth,
+                            "height" to videoNaturalHeight,
+                            "size" to videoFile.length()
+                        )
+                    )
+
+                    currentVideo = videoFile
+                    generatedOptimizedVideos.add(optimizedVideoFile)
+                    log("Video was successfully optimized")
                 }
 
-                call.resolve(
-                    JSObject().apply {
-                        put("type", PICK_TYPE_ENDED)
-                        put("success", true)
-                        put("fileName", fileName)
-                        put("filePath", optimizedVideoFile.absolutePath)
-                        put("width", videoNaturalWidth)
-                        put("height", videoNaturalHeight)
-                        put("size", videoFile.length())
-                    }
-                )
 
-                currentVideo = videoFile
-                generatedOptimizedVideos.add(optimizedVideoFile)
-                log("Video was successfully optimized")
 
             }
 
@@ -180,11 +192,13 @@ class MediaManager:Plugin() {
 
         val listener = object : Mp4Composer.Listener {
             override fun onProgress(progress: Double) {
-                call.resolve(
-                    JSObject().apply {
-                        put("type", PICK_TYPE_PROGRESS)
-                        put("progress", progress)
-                    }
+
+                resolveCall(
+                    call,
+                    mapOf(
+                        "type" to PICK_TYPE_PROGRESS,
+                        "progress" to progress
+                    )
                 )
 
                 //log("Optimization progress: ${(progress * 100).toInt()}%")
@@ -244,12 +258,22 @@ class MediaManager:Plugin() {
         pickVideoActivity = activity.registerForActivityResult(
             ActivityResultContracts.PickVisualMedia()
         ) { result ->
-            result?.let {
-                if (currentVideoPickCall != null) {
-                    processPickedVideo(it, currentVideoPickCall!!)
-                }
+            log("Pick video was null: ${result == null}")
+            currentVideoPickCall?.let {
 
+
+                if (result != null) {
+                    processPickedVideo(result, it)
+                } else {
+                    resolveCall(it, mapOf(
+                        "type" to PICK_TYPE_CANCELLED
+                    ))
+
+                    bridge.releaseCall(it)
+                }
             }
+
+
             currentVideoPickCall = null
         }
 
