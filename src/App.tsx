@@ -624,6 +624,8 @@ function TimelineCutters({
   }) {
   type Grabber = 'left' | 'right';
 
+  const GRABBER_THICKNESS = 32;
+
   const videoContext = useVideoContext();
   const {
     duration,
@@ -659,7 +661,6 @@ function TimelineCutters({
       loopId = requestAnimationFrame(loop);
 
       let left = videoContext.trimStart - displacementRef.current - grabberThickness;
-
       let width = clamp((videoContext.trimEnd - videoContext.trimStart) + grabberThickness*2, 0, 1+grabberThickness*2);
       
       cutElement.style.left = `${left * 100}%`;
@@ -672,7 +673,7 @@ function TimelineCutters({
 
     loop();
 
-    function getHoveredGrabber({clientX, clientY}:{clientX:number, clientY:number}):Grabber|undefined {
+    function getHoveredGrabber({ clientX, clientY }: { clientX: number, clientY: number }): Grabber | undefined {
       const rect = cutElement.getBoundingClientRect();
 
 
@@ -683,8 +684,10 @@ function TimelineCutters({
       const left = rect.left;
       const right = rect.right;
 
-      const isInLeft = (clientX > left && clientX < (left + 8));
-      const isInRight = (clientX > (right - 8) && clientX < right)
+      const HALF_GRABBER_THICKNESS = GRABBER_THICKNESS * .5;
+
+      const isInLeft = (clientX > left - HALF_GRABBER_THICKNESS && clientX < left + HALF_GRABBER_THICKNESS);
+      const isInRight = (clientX > right -HALF_GRABBER_THICKNESS && clientX < right + HALF_GRABBER_THICKNESS)
       
       if (isInLeft) {
         return 'left'
