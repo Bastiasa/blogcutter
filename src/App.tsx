@@ -172,7 +172,7 @@ function MenuButton() {
             if (last.enabled && last.optionButtons && last.onOptionButton) {
               return {
                 ...last,
-                progress:data.progress
+                progress: data.progress * 100
               }
             }
             return {
