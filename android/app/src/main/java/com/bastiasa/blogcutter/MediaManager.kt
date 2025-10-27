@@ -50,6 +50,8 @@ class MediaManager:Plugin() {
     private var composer:Mp4Composer? = null
     private var clipId = 0
 
+    private val generatedOptimizedVideos = arrayListOf<File>()
+
 
     private fun log(message: String) {
         Log.d("Capacitor/MediaManager", message)
@@ -168,6 +170,7 @@ class MediaManager:Plugin() {
                 )
 
                 currentVideo = videoFile
+                generatedOptimizedVideos.add(optimizedVideoFile)
                 log("Video was successfully optimized")
 
             }
@@ -227,6 +230,15 @@ class MediaManager:Plugin() {
 
     }
 
+
+    override fun handleOnDestroy() {
+        generatedOptimizedVideos.forEach {
+            if (it.exists()) {
+                it.delete()
+            }
+        }
+        super.handleOnDestroy()
+    }
     override fun handleOnStart() {
         super.handleOnStart()
         pickVideoActivity = activity.registerForActivityResult(
