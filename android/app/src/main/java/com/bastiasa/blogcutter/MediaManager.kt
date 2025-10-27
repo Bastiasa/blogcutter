@@ -188,6 +188,7 @@ class MediaManager:Plugin() {
 
             }
 
+            currentVideoPickCall = null
             bridge.releaseCall(call)
         }
 
@@ -236,6 +237,13 @@ class MediaManager:Plugin() {
                     }
                 }
 
+                currentVideoPickCall = null
+                currentVideo = videoFile
+
+                if (optimizedVideoFile.exists()) {
+                    optimizedVideoFile.delete()
+                }
+
                 resolveCall(
                     call,
                     mapOf(
@@ -248,13 +256,6 @@ class MediaManager:Plugin() {
                         "size" to videoFile.length()
                     )
                 )
-
-                currentVideoPickCall = null
-                currentVideo = videoFile
-
-                if (optimizedVideoFile.exists()) {
-                    optimizedVideoFile.delete()
-                }
             }
 
             override fun onFailed(exception: Exception?) {
@@ -353,6 +354,7 @@ class MediaManager:Plugin() {
     fun pickVideoFile(call:PluginCall) {
 
         if (currentVideoPickCall != null) {
+            log("Tried to pick a video file while busy")
             resolveCall(call, mapOf(
                 "type" to PICK_TYPE_BUSY
             ))
