@@ -1,73 +1,122 @@
-# React + TypeScript + Vite
+<p align="center">
+  <img src="icon.svg" alt="BlogCutter Logo" width="128" style="border-radius:18px;">
+</p>
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+<h1 align="center">BlogCutter</h1>
 
-Currently, two official plugins are available:
+<p align="center">
+  Fast & non-blocking video cutter for Android
+</p>
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Android-green" />
+  <img src="https://img.shields.io/badge/status-Demo-blue" />
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey" />
+</p>
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## ✂️ What is BlogCutter?
 
-## Expanding the ESLint configuration
+**BlogCutter** is an Android application designed to **quickly cut long videos into multiple clips** with a single click.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Its main advantage is a **non-blocking workflow**:  
+you can create a new cut immediately while previous cuts are still being processed.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+This makes it ideal for fast content creation and repetitive clipping tasks.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## 🚀 Key Features
+
+- 🎬 One-click video cutting  
+- ⚡ Non-blocking processing (cuts run in parallel)  
+- 🔁 Create multiple cuts without waiting  
+- 📂 All clips are stored automatically in a folder  
+- 🔢 Clips are saved **in creation order**  
+- 🧠 Simple and efficient workflow  
+
+---
+
+## 🧪 Project Status
+
+> ⚠️ **Demo / Functional Prototype**  
+> This project is intended to demonstrate the concept and processing workflow.  
+> It is not a full-featured professional video editor.
+
+---
+
+## 📦 Download
+
+You can download the demo APK from the **Releases** section:
+
+```text
+https://github.com/Bastiasa/blogcutter/releases
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+> Android may show a warning when installing APKs from unknown sources.  
+> This is expected for demo applications.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 🖼️ Screenshots
+
+<p align="center">
+  <img src="screenshots/main.jpg" alt="Main Screen" width="250">
+  <img src="screenshots/cutting.jpg" alt="Cutting Process" width="250">
+  <img src="screenshots/output.jpg" alt="Output Folder" width="250">
+</p>
+
+---
+
+## 🛠️ Built With
+
+- Android Studio  
+- Java / Kotlin  
+- Local video processing  
+- Android Storage APIs  
+
+---
+
+## 🧠 What This Project Demonstrates
+
+- Concurrent background processing  
+- Non-blocking UI design  
+- Efficient file management  
+- Fast interaction-driven workflows  
+- Clean and simple app logic  
+
+---
+
+## 📂 Output Organization
+
+All generated clips are automatically saved in a dedicated folder.  
+Files are ordered based on the sequence in which the cuts were created, making them easy to use or upload later.
+
+---
+
+## ❌ Known Limitations
+
+- No advanced editing features (filters, transitions, audio tools)  
+- Basic UI focused on functionality  
+- Not optimized for tablets  
+- No automated tests included  
+
+---
+
+## 👤 Author
+
+Developed by **Luis Bastidas**  
+- Portfolio: https://bastiasa.github.io/portfolio
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License**.
+
+---
+
+## ⭐ Notes
+
+If you find this project useful or interesting, feel free to star the repository.
